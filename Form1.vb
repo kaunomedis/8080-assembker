@@ -85,7 +85,7 @@ Public Class ASM8080
             RichTextBox2.AppendText("%%%%%% PASS #" + j.ToString + vbCrLf)
             For i = 0 To lastLine
                 tmp = RichTextBox1.Lines(i)
-                analyze_line(tmp, i, j)
+                Analyze_line(tmp, i, j)
             Next
         Next j
 
@@ -107,12 +107,12 @@ Public Class ASM8080
         End If
 
     End Sub
-    'Private Function DeHEX(a As String) As String
-    '    Return Regex.Replace(a, "[^0-9,^A-F]+", "")
-    'End Function
-    'Private Function DeDEC(a As String) As String
-    '    Return Regex.Replace(a, "[^\d]", "")
-    'End Function
+    ''' <summary>
+    ''' Convert integer to fixed lenght (4) hex string
+    ''' With padding zeroes. Value trimet to word
+    ''' </summary>
+    ''' <param name="a">input integer</param>
+    ''' <returns></returns>
     Public Shared Function HEX4(a As UInt32) As String
         Dim s As String = ""
         a = a And &HFFFF
@@ -122,37 +122,44 @@ Public Class ASM8080
         s += Hex(a)
         Return s
     End Function
+    ''' <summary>
+    ''' Convert integert to fixed lenght byte (2) string
+    ''' With padding zeroes, value trimmed to byte
+    ''' </summary>
+    ''' <param name="a"></param>
+    ''' <returns></returns>
     Public Shared Function HEX2(a As UInt32) As String
         a = a And 255
         Dim s As String = ""
         If a < 16 Then s = "0"
         Return s + Hex(a)
     End Function
+    ''' <summary>
+    ''' Convert HEX string to integer is safe way
+    ''' </summary>
+    ''' <param name="a">Input string</param>
+    ''' <returns>Hex converted to integer</returns>
     Public Shared Function PHEX(a As String) As UInt32
         a = a.ToUpper.Trim
         a = Regex.Replace(a, "[^0-9A-F]", "")
         Return CUInt("&H0" + a)
     End Function
-    'Private Function GetValFromString(a As String) As Int32
 
-    '    a = a.Trim(trimchars)
-    '    If a.Length < 1 Then Return 0
-    '    If a.StartsWith("$") Then '//HEX
-    '        a = PHEX(a).ToString
-    '    Else
-    '        a = DeDEC(a)
-    '    End If
-    '    Return Val(a)
-    'End Function
-    Dim kabutese As String = ""
-    Private Sub analyze_line(line As String, lineno As UInt32, pass As Byte)
+    Dim kabutese As String = "" 'work'a'round
+    ''' <summary>
+    ''' Parse source code line
+    ''' </summary>
+    ''' <param name="line">Listing line as string</param>
+    ''' <param name="lineno">Line number as integer (for error lisntings)</param>
+    ''' <param name="pass">Pass as byte. 0 - initial analyze and label collection,
+    ''' 2 - full compilation. Must run both passes.</param>
+    Private Sub Analyze_line(line As String, lineno As UInt32, pass As Byte)
 
         Dim tmp_string, tmp_string2, tmp_string3 As String
         Dim tmps As String
         Dim registras1, registras2 As Byte
         kabutese = ""
         Dim opcode As Byte
-
 
         If line.Contains("""") Then
             Dim ka = line.IndexOf("""")
@@ -180,14 +187,11 @@ Public Class ASM8080
 
         line = Regex.Replace(line, "[^0-9A-Za-z\-+:$%*"";=.()'', ]", "")
 
-
         '// ";" - komentaras.
         If line.Contains(";") And kabutese <> ";" Then
             Dim b = line.IndexOf(";")
             line = line.Substring(0, b)
         End If
-
-
 
         Dim a = line.Split(separatoriai)
         '//Komanda,label,parametrai
@@ -205,14 +209,6 @@ Public Class ASM8080
                 tmp_string3 = a(2).Trim(trimchars)
             End If
         End If
-
-
-
-
-
-
-
-
 
         tmp_string = tmp_string.ToUpper
         If keywords.Contains(tmp_string) Or keywords.Contains(tmp_string2) Then '//KOMANDOS
@@ -270,7 +266,6 @@ Public Class ASM8080
                         ReportError("RAM adr overflow counting source. Program too long?")
                         current_adr = current_adr And &HFFFF
                     End If
-
 
                 ElseIf pass = 1 Then
                     Dim i = ASM.IndexOf(tmp_string2)
@@ -350,16 +345,11 @@ Public Class ASM8080
                         CD(ASM_A(i))
                     End If
 
-
-
-
                     current_adr = current_adr + ASM_L(i)
                     '//search for label
                     If labels.Contains(tmp_string3) Then
 
                         Dim l As UInt32 = CalculateValue(tmp_string3)
-
-
 
                         If ASM_L(i) = 2 Then
                             listing.Append(" " + HEX2(l And 255) + vbTab)
@@ -410,6 +400,13 @@ Public Class ASM8080
         End If
 
     End Sub
+    ''' <summary>
+    ''' Calculate register as binary from symbolic name.
+    ''' Works both in single, dual, number and specific format.
+    ''' Used to calculate different opcodes.
+    ''' </summary>
+    ''' <param name="a">Register name</param>
+    ''' <returns>Register number as byte</returns>
     Private Function AnalizuotiRegistra(a As String) As Byte
         Dim b As Byte
         a = a.ToUpper
@@ -433,7 +430,14 @@ Public Class ASM8080
         Return b
 
     End Function
-
+    ''' <summary>
+    ''' Calculates value from string. Can convert:
+    ''' decimal, hexadecimal, octal, label, list (comma separated),
+    ''' chars (encapsulated in ' or "), simple math: a+1, 'A"-1, label-'a',...
+    ''' Warning: this function is recursive.
+    ''' </summary>
+    ''' <param name="a">String of value (values)</param>
+    ''' <returns>Value as int</returns>
     Private Function CalculateValue(a As String) As UInt32
         Dim l As UInt32
         Dim tmp_a = a
@@ -488,6 +492,10 @@ Public Class ASM8080
         End If
         Return l
     End Function
+    ''' <summary>
+    ''' Push data to listing and RAM buffer. Increments RAM adr.
+    ''' </summary>
+    ''' <param name="d">data to store</param>
     Private Sub CD(d As UInt32)
         If d > 255 Then ReportError("Internal byte overflow: [" + Hex(d) + "].")
 
@@ -500,6 +508,11 @@ Public Class ASM8080
             ram_adr = ram_adr And &HFFFF
         End If
     End Sub
+    ''' <summary>
+    ''' Convert integer data to string as pair of hex bytes.
+    ''' </summary>
+    ''' <param name="l">integer</param>
+    ''' <returns>Formated hex string</returns>
     Private Function HexPair(l As UInt32) As String
         Return " " + HEX2(l And 255) + " " + HEX2(l >> 8)
     End Function
@@ -514,10 +527,20 @@ Public Class ASM8080
         End If
         ram_adr = a And &HFFFF
     End Sub
+    ''' <summary>
+    ''' Push error message to errors list and listing
+    ''' </summary>
+    ''' <param name="a">Error text</param>
     Private Sub ReportError(a As String)
         errors.Add(a + vbCrLf)
         listing.Append(" ERROR: " + a + vbCrLf)
     End Sub
+    ''' <summary>
+    ''' Calculate how many bytes are in data string (DB,DW,DS)
+    ''' </summary>
+    ''' <param name="type">Type of ASM command</param>
+    ''' <param name="value">String of data</param>
+    ''' <returns>Number of bytes</returns>
     Private Function Calcualte_DxLen(type As String, value As String) As UInt32
         Dim l As UInt32 = 0
         Dim n As New StringBuilder
@@ -531,6 +554,13 @@ Public Class ASM8080
         End Select
         Return l
     End Function
+    ''' <summary>
+    ''' Calculate DB string to data.
+    ''' </summary>
+    ''' <param name="value">String of data</param>
+    ''' <param name="listing">Pointer to listing</param>
+    ''' <param name="current_adr">Current adr of DB</param>
+    ''' <param name="write">Boolean: True=write data, False=just count</param>
     Private Sub CalculateDB(value As String, ByRef listing As StringBuilder, ByRef current_adr As UInt32, write As Boolean)
         Dim a As UInt32
         If value = """,""" Or value = "','" Then '2E
@@ -551,8 +581,6 @@ Public Class ASM8080
             'ElseIf value.Contains("'") Then
             '    a = a
 
-
-
         Else
             a = CalculateValue(value)
             listing.Append(HEX2(a))
@@ -561,6 +589,13 @@ Public Class ASM8080
         End If
         'listing.Append(vbTab)
     End Sub
+    ''' <summary>
+    ''' Calculate DW string to data.
+    ''' </summary>
+    ''' <param name="value">String of data</param>
+    ''' <param name="listing">Pointer to listing</param>
+    ''' <param name="current_adr">Current adr of DB</param>
+    ''' <param name="write">Boolean: True=write data, False=just count</param>
     Private Sub CalculateDW(value As String, ByRef listing As StringBuilder, ByRef current_adr As UInt32, write As Boolean)
         Dim a As UInt32
         If value.Contains(",") Then
@@ -581,6 +616,12 @@ Public Class ASM8080
         End If
 
     End Sub
+    ''' <summary>
+    ''' Calculate DS value to data.
+    ''' </summary>
+    ''' <param name="value">Value</param>
+    ''' <param name="listing">Pointer to listing</param>
+    ''' <param name="current_adr">Current adr of DB</param>
     Private Sub CalculateDS(value As String, ByRef listing As StringBuilder, ByRef current_adr As UInt32)
         If value <> "" Then
             current_adr = current_adr + CalculateValue(value)
