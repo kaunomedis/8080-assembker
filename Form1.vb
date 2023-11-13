@@ -1,4 +1,5 @@
-﻿
+﻿' simple 8080 assembler.
+'(c)2023 by www.vabolis.lt
 Imports System.IO
 Imports System.Reflection
 Imports System.Text
@@ -6,7 +7,7 @@ Imports System.Text.RegularExpressions
 
 
 Public Class ASM8080
-    Dim keywords As New List(Of String) From {"START", "END", "ORG", ".ORG"}
+    Dim keywords As New List(Of String) From {"START", "END", "ORG", ".ORG", ".TITLE"}
 
     Dim ASM As New List(Of String) From
         {
@@ -161,6 +162,9 @@ Public Class ASM8080
         kabutese = ""
         Dim opcode As Byte
 
+        line = Regex.Replace(line, "[^ -~]/g", "") '// ALL printable?
+        line = CleanSpacesProperly(line) '//Remove first 3 space fills, tab fils. Remove tabs.
+
         If line.Contains("""") Then
             Dim ka = line.IndexOf("""")
             Dim kb = line.LastIndexOf("""")
@@ -169,23 +173,13 @@ Public Class ASM8080
                 kabutese = kabutese.Remove(kb - ka - 1)
             End If
         ElseIf line.Contains("'") Then
-            Dim ka = line.IndexOf("'")
+        Dim ka = line.IndexOf("'")
             Dim kb = line.LastIndexOf("'")
             If ka < kb Then
                 kabutese = line.Substring(ka + 1)
                 kabutese = kabutese.Remove(kb - ka - 1)
             End If
         End If
-
-        'line = line.ToUpper
-        line = line.TrimEnd(trimchars)
-
-        line = line.Replace(vbTab, " ")
-        While line.Contains("  ")
-            line = line.Replace("  ", " ")
-        End While
-
-        line = Regex.Replace(line, "[^0-9A-Za-z\-+:$%*"";=.()'', ]", "")
 
         '// ";" - komentaras.
         If line.Contains(";") And kabutese <> ";" Then
@@ -209,6 +203,13 @@ Public Class ASM8080
                 tmp_string3 = a(2).Trim(trimchars)
             End If
         End If
+        If a.Length > 3 Then
+            Dim i
+            For i = 3 To a.Length - 1
+                tmp_string3 = tmp_string3 + " " + a(i)
+            Next
+        End If
+
 
         tmp_string = tmp_string.ToUpper
         If keywords.Contains(tmp_string) Or keywords.Contains(tmp_string2) Then '//KOMANDOS
@@ -216,6 +217,12 @@ Public Class ASM8080
                 current_adr = CalculateValue(tmp_string2)
                 'listing.Append("New ORG: " + HEX4(current_adr) + vbCrLf)
                 Exit Sub
+            ElseIf tmp_string.Contains(".TITLE") Then
+                listing.Append("TITLE" + vbCrLf)
+                tmp_string = ""
+                tmp_string2 = ""
+                tmp_string3 = ""
+
             ElseIf tmp_string2 = "ORG" Or tmp_string2 = ".ORG" Then
                 current_adr = CalculateValue(tmp_string3)
                 'listing.Append("New ORG: " + HEX4(current_adr) + vbCrLf)
@@ -268,6 +275,8 @@ Public Class ASM8080
                     End If
 
                 ElseIf pass = 1 Then
+
+
                     Dim i = ASM.IndexOf(tmp_string2)
 
                     If ASM(i) = "ADD" Or ASM(i) = "SUB" Or ASM(i) = "ADC" Or ASM(i) = "SBB" Or ASM(i) = "ANA" Or ASM(i) = "XRA" Or ASM(i) = "ORA" Or ASM(i) = "CMP" Then
@@ -410,6 +419,7 @@ Public Class ASM8080
     Private Function AnalizuotiRegistra(a As String) As Byte
         Dim b As Byte
         a = a.ToUpper
+        a = a.Trim(trimchars)
         If a = "" Then
             ReportError("Empty or wrong (wrong chars) register name.")
             Return 0 '//briedas
@@ -455,6 +465,15 @@ Public Class ASM8080
         ElseIf a = "''" And kabutese <> "" Then                                     ' ''
             a = kabutese
             l = Asc(a)
+        ElseIf a.StartsWith("""") And a.EndsWith("""") And a.Length > 3 Then
+            '//STRING! cia neturi patekti!
+            'a = a.Trim("""")
+            'Dim i
+            'For i = 0 To a.Length - 1
+            '    '//????
+            'Next
+            a = a
+
         ElseIf labels.Contains(a) Then
             Dim k = labels.IndexOf(a)
             l = labels_adr(k)
@@ -479,9 +498,9 @@ Public Class ASM8080
 
         Else
             ' paprastas skacius
-            If a.StartsWith("$") Or a.EndsWith("H") Then
+            If a.StartsWith("$") Or a.EndsWith("H") Or a.EndsWith("h") Then
                 l = PHEX(a.ToUpper)
-            ElseIf a.Contains("O") Or a.EndsWith("Q") Then
+            ElseIf a.Contains("O") Or a.EndsWith("Q") Or a.EndsWith("q") Then
                 l = Val("&O0" + Regex.Replace(a, "[^0-8]", "")) And &HFFFF
             Else
                 Regex.Replace(a, "[^\d]", "")
@@ -497,7 +516,7 @@ Public Class ASM8080
     ''' </summary>
     ''' <param name="d">data to store</param>
     Private Sub CD(d As UInt32)
-        If d > 255 Then ReportError("Internal byte overflow: [" + Hex(d) + "].")
+        'If d > 255 Then ReportError("Internal byte overflow: [" + Hex(d) + "].")
 
         d = d And 255
         RAM(ram_adr) = d
@@ -514,7 +533,7 @@ Public Class ASM8080
     ''' <param name="l">integer</param>
     ''' <returns>Formated hex string</returns>
     Private Function HexPair(l As UInt32) As String
-        Return " " + HEX2(l And 255) + " " + HEX2(l >> 8)
+        Return HEX2(l And 255) + " " + HEX2(l >> 8)
     End Function
     ''' <summary>
     ''' Construct Address
@@ -554,6 +573,18 @@ Public Class ASM8080
         End Select
         Return l
     End Function
+    Private Sub UnfoldTheString(value As String, ByRef listing As StringBuilder, ByRef current_adr As UInt32, write As Boolean)
+        value = value.Trim("""")
+        Dim i As UInt32
+        Dim a As Byte
+
+        For i = 0 To value.Length - 1
+            a = Asc(value.Chars(i))
+            If write Then CD(a)
+            listing.Append(HEX2(a) + " ")
+            current_adr += 1
+        Next
+    End Sub
     ''' <summary>
     ''' Calculate DB string to data.
     ''' </summary>
@@ -563,16 +594,23 @@ Public Class ASM8080
     ''' <param name="write">Boolean: True=write data, False=just count</param>
     Private Sub CalculateDB(value As String, ByRef listing As StringBuilder, ByRef current_adr As UInt32, write As Boolean)
         Dim a As UInt32
+
+
         If value = """,""" Or value = "','" Then '2E
             listing.Append("2E ")
             CD(&H2E)
         ElseIf value.Contains(",") Then
             Dim charss As String() = value.Split(",")
             For Each chars In charss
-                a = CalculateValue(chars)
-                listing.Append(HEX2(a) + " ")
-                If write Then CD(a)
-                current_adr += 1
+                If chars.StartsWith("""") And chars.EndsWith("""") And chars.Length > 3 Then
+                    UnfoldTheString(chars, listing, current_adr, write)
+                Else
+                    a = CalculateValue(chars)
+                    listing.Append(HEX2(a) + " ")
+                    If write Then CD(a)
+                    current_adr += 1
+                End If
+
             Next
 
             'ElseIf value.Contains("""") Then
@@ -582,10 +620,14 @@ Public Class ASM8080
             '    a = a
 
         Else
-            a = CalculateValue(value)
-            listing.Append(HEX2(a))
-            If write Then CD(a)
-            current_adr += 1
+            If value.StartsWith("""") And value.EndsWith("""") And value.Length > 3 Then
+                UnfoldTheString(value, listing, current_adr, write)
+            Else
+                a = CalculateValue(value)
+                listing.Append(HEX2(a))
+                If write Then CD(a)
+                current_adr += 1
+            End If
         End If
         'listing.Append(vbTab)
     End Sub
@@ -637,5 +679,34 @@ Public Class ASM8080
 
     Private Sub Button3_Click(sender As Object, e As EventArgs) Handles Button3.Click
         File.WriteAllBytes("C:\Users\User\Desktop\Altair32\files\asm\TESTAS.BIN", RAM)
+    End Sub
+
+    Private Function CleanSpacesProperly(value As String) As String
+        Dim stopas As Boolean = False
+        Dim i As UInt32 = 0
+        Dim radau As Boolean = False
+        Dim tabai As Byte = 0
+        value = value.Replace(vbTab, " ")
+        value = value.TrimEnd(trimchars)
+        If value = "" Then Return ""
+
+        While Not stopas
+            If value.Chars(i) <> " " Then
+                i = i + 1
+                radau = False
+            ElseIf value.Chars(i) = " " And Not radau Then
+                radau = True
+                i = i + 1
+                tabai = tabai + 1
+            Else
+                value = value.Remove(i, 1)
+            End If
+
+            If i >= value.Length - 1 Or tabai = 4 Then stopas = True
+        End While
+        Return value
+    End Function
+
+
     End Sub
 End Class
