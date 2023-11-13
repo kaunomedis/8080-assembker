@@ -2,6 +2,7 @@
 '(c)2023 by www.vabolis.lt
 Imports System.IO
 Imports System.Reflection
+Imports System.Runtime.Serialization.Formatters.Binary
 Imports System.Text
 Imports System.Text.RegularExpressions
 
@@ -173,7 +174,7 @@ Public Class ASM8080
                 kabutese = kabutese.Remove(kb - ka - 1)
             End If
         ElseIf line.Contains("'") Then
-        Dim ka = line.IndexOf("'")
+            Dim ka = line.IndexOf("'")
             Dim kb = line.LastIndexOf("'")
             If ka < kb Then
                 kabutese = line.Substring(ka + 1)
@@ -209,7 +210,6 @@ Public Class ASM8080
                 tmp_string3 = tmp_string3 + " " + a(i)
             Next
         End If
-
 
         tmp_string = tmp_string.ToUpper
         If keywords.Contains(tmp_string) Or keywords.Contains(tmp_string2) Then '//KOMANDOS
@@ -275,7 +275,6 @@ Public Class ASM8080
                     End If
 
                 ElseIf pass = 1 Then
-
 
                     Dim i = ASM.IndexOf(tmp_string2)
 
@@ -385,18 +384,13 @@ Public Class ASM8080
                         '        If ASM_L(i) = 3 Then listing.Append(" " + HEX2(k And 255) + " " + HEX2(k >> 8)) : CD(k And 255) : CD(k >> 8) '//LSB-MSB
                         If ASM_L(i) = 3 Then listing.Append(HexPair(k)) : CD(k And 255) : CD(k >> 8) '//LSB-MSB
 
-
-
                         listing.Append(vbTab)
                         listing.Append(": " + ASM(i))
 
                         If ASM_L(i) = 2 Then listing.Append(" #" + HEX2(k))
                         If ASM_L(i) = 3 Then listing.Append(" #" + HEX4(k))
 
-
                     End If
-
-
 
                     '//error
                     listing.Append(vbTab + vbTab + "; " + line)
@@ -472,8 +466,8 @@ Public Class ASM8080
             'For i = 0 To a.Length - 1
             '    '//????
             'Next
-            a = a
-
+            'a = a
+            'no way to get here!
         ElseIf labels.Contains(a) Then
             Dim k = labels.IndexOf(a)
             l = labels_adr(k)
@@ -573,6 +567,13 @@ Public Class ASM8080
         End Select
         Return l
     End Function
+    ''' <summary>
+    ''' Convert string to series of bytes
+    ''' </summary>
+    ''' <param name="value">Input string</param>
+    ''' <param name="listing">pointer to listing</param>
+    ''' <param name="current_adr">current address for data</param>
+    ''' <param name="write">true- write data, false- just count</param>
     Private Sub UnfoldTheString(value As String, ByRef listing As StringBuilder, ByRef current_adr As UInt32, write As Boolean)
         value = value.Trim("""")
         Dim i As UInt32
@@ -594,7 +595,6 @@ Public Class ASM8080
     ''' <param name="write">Boolean: True=write data, False=just count</param>
     Private Sub CalculateDB(value As String, ByRef listing As StringBuilder, ByRef current_adr As UInt32, write As Boolean)
         Dim a As UInt32
-
 
         If value = """,""" Or value = "','" Then '2E
             listing.Append("2E ")
@@ -678,9 +678,22 @@ Public Class ASM8080
     End Sub
 
     Private Sub Button3_Click(sender As Object, e As EventArgs) Handles Button3.Click
-        File.WriteAllBytes("C:\Users\User\Desktop\Altair32\files\asm\TESTAS.BIN", RAM)
-    End Sub
+        SaveFileDialog1.Title = "Save ALL 64K RAM"
+        SaveFileDialog1.Filter = "Binary file |*.bin|All files |*.*"
+        If SaveFileDialog1.ShowDialog = DialogResult.OK Then
+            Try
+                File.WriteAllBytes(SaveFileDialog1.FileName, RAM)
+            Catch ex As Exception
+                MsgBox("Write file error: " + ex.Message)
+            End Try
+        End If
 
+    End Sub
+    ''' <summary>
+    ''' Clean source code, remove extra spaces (tabs) for first collumns
+    ''' </summary>
+    ''' <param name="value">Source code line</param>
+    ''' <returns>Filtered source code line</returns>
     Private Function CleanSpacesProperly(value As String) As String
         Dim stopas As Boolean = False
         Dim i As UInt32 = 0
@@ -702,11 +715,10 @@ Public Class ASM8080
                 value = value.Remove(i, 1)
             End If
 
-            If i >= value.Length - 1 Or tabai = 4 Then stopas = True
+            If i >= value.Length - 1 Or tabai = 3 Then stopas = True
         End While
         Return value
     End Function
 
 
-    End Sub
 End Class

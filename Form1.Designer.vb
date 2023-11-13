@@ -28,6 +28,7 @@ Partial Class ASM8080
         Me.Button1 = New System.Windows.Forms.Button()
         Me.Button2 = New System.Windows.Forms.Button()
         Me.Button3 = New System.Windows.Forms.Button()
+        Me.SaveFileDialog1 = New System.Windows.Forms.SaveFileDialog()
         Me.SuspendLayout()
         '
         'RichTextBox1
@@ -96,4 +97,5 @@ Partial Class ASM8080
     Friend WithEvents Button1 As Button
     Friend WithEvents Button2 As Button
     Friend WithEvents Button3 As Button
+    Friend WithEvents SaveFileDialog1 As SaveFileDialog
 End Class
