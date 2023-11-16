@@ -154,10 +154,14 @@ Public Class ASM8080
     ''' </summary>
     ''' <param name="a">Input string</param>
     ''' <returns>Hex converted to integer</returns>
-    Public Shared Function PHEX(a As String) As UInt32
+    Private Function PHEX(a As String) As UInt32
         a = a.ToUpper.Trim
         a = Regex.Replace(a, "[^0-9A-F]", "")
-        Return CUInt("&H0" + a)
+        If a.Length > 4 Then
+            ReportError("HEX overflow [" + a + "] trimmed to 4 chars")
+            a = a.Substring(0, 4)
+        End If
+        Return (CUInt("&H0" + a) And &HFFFF)
     End Function
 
     Dim kabutese As String = "" 'work'a'round
@@ -257,6 +261,7 @@ Public Class ASM8080
                     labels.Add(tmp_string)
 
                     If tmp_string2 = "EQU" Or tmp_string2 = ".EQU" Or tmp_string2 = "=" Then
+
                         labels_adr.Add(CalculateValue(tmp_string3))
                         labels_lineno.Add(lineno + 1)
                     Else
@@ -460,7 +465,11 @@ Public Class ASM8080
     Private Function CalculateValue(a As String) As UInt32
         Dim l As UInt32
         Dim tmp_a = a
+
+
         a = a.Trim(trimchars)
+
+        If a = "$" Then Return current_adr
 
         If a = "" Then Return 0
         If a.Length < 1 Then Return 0 '? kodel nesuveike?
@@ -474,16 +483,18 @@ Public Class ASM8080
         ElseIf a = "''" And kabutese <> "" Then                                     ' ''
             a = kabutese
             l = Asc(a)
-        ElseIf a.StartsWith("""") And a.EndsWith("""") And a.Length > 3 Then
-            '//STRING! cia neturi patekti!
-            'a = a.Trim("""")
-            'Dim i
-            'For i = 0 To a.Length - 1
-            '    '//????
-            'Next
-            'a = a
-            'no way to get here!
-            ReportError("Internal value calculation error. String parsing.")
+        ElseIf (a.StartsWith("""") And a.EndsWith("""") And a.Length > 3) Or
+            (a.StartsWith("'") And a.EndsWith("'") And a.Length > 3) Then
+
+            If a.StartsWith("""") Then
+                a = a.Trim("""")
+            ElseIf a.StartsWith("'") Then
+                a = a.Trim("'")
+            End If
+
+            ReportError("String in byte/word val detected. Nonsense in output:")
+            UnfoldTheString(a, listing, current_adr, True) '???
+            ReportError("Internal assembler error. Value calculation error. String parsing.")
         ElseIf labels.Contains(a) Then
             Dim k = labels.IndexOf(a)
             l = labels_adr(k)
@@ -595,7 +606,8 @@ Public Class ASM8080
     ''' <param name="current_adr">current address for data</param>
     ''' <param name="write">true- write data, false- just count</param>
     Private Sub UnfoldTheString(value As String, ByRef listing As StringBuilder, ByRef current_adr As UInt32, write As Boolean)
-        value = value.Trim("""")
+        If value.StartsWith("""") Then value = value.Trim("""")
+        If value.StartsWith("'") Then value = value.Trim("'")
         Dim i As UInt32
         Dim a As Byte
 
@@ -622,7 +634,7 @@ Public Class ASM8080
         ElseIf value.Contains(",") Then
             Dim charss As String() = value.Split(",")
             For Each chars In charss
-                If chars.StartsWith("""") And chars.EndsWith("""") And chars.Length > 3 Then
+                If (chars.StartsWith("""") And chars.EndsWith("""") And chars.Length > 3) Or (chars.StartsWith("'") And chars.EndsWith("'") And chars.Length > 3) Then
                     UnfoldTheString(chars, listing, current_adr, write)
                 Else
                     a = CalculateValue(chars)
@@ -640,7 +652,7 @@ Public Class ASM8080
             '    a = a
 
         Else
-            If value.StartsWith("""") And value.EndsWith("""") And value.Length > 3 Then
+            If (value.StartsWith("""") And value.EndsWith("""") And value.Length > 3) Or (value.StartsWith("'") And value.EndsWith("'") And value.Length > 3) Then
                 UnfoldTheString(value, listing, current_adr, write)
             Else
                 a = CalculateValue(value)
