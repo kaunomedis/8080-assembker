@@ -63,8 +63,12 @@ Public Class ASM8080
     Dim labels_adr As New List(Of UInt32)
     Dim labels_lineno As New List(Of UInt32)
 
-    Dim errors As New List(Of String)
+    Dim errors As New StringBuilder
+    Dim warnings As New StringBuilder
     Dim listing As New StringBuilder
+    Dim intel_hex As New StringBuilder
+
+    Dim org_detected As Boolean = False
 
     Dim separatoriai() As Char = {" ", vbTab}
     Dim trimchars() As Char = {" ", ":", vbTab, vbCr, vbCrLf}
@@ -79,8 +83,8 @@ Public Class ASM8080
         Dim i, j As Int16
 
         listing = New StringBuilder
-
         current_adr = 0
+        org_detected = False
 
         Dim lastLine = RichTextBox1.Lines.Length - 1
         For j = 0 To 1
@@ -91,7 +95,10 @@ Public Class ASM8080
             Next
         Next j
 
+        If Not org_detected Then ReportError("No ORG detected. Addresses will overlap.")
+
         RichTextBox2.AppendText(listing.ToString + vbCrLf)
+
         If labels.Count > 0 Then
             RichTextBox2.AppendText(vbCrLf + "%%%%%% LABEL DATABASE:" + vbCrLf)
             For i = 0 To labels.Count - 1
@@ -99,9 +106,15 @@ Public Class ASM8080
             Next
         End If
 
-        If errors.Count > 0 Then
+
+        If warnings.Length > 0 Then
+            RichTextBox2.AppendText(vbCrLf + vbCrLf + "%%%%% WARNING REPORT:" + vbCrLf)
+            RichTextBox2.AppendText(warnings.ToString)
+        End If
+
+        If errors.Length > 0 Then
             RichTextBox2.AppendText(vbCrLf + vbCrLf + "%%%%% ERROR REPORT:" + vbCrLf)
-            RichTextBox2.AppendText(String.Join("", errors.ToArray))
+            RichTextBox2.AppendText(errors.ToString)
         End If
 
         If current_adr <> ram_adr Then
@@ -216,15 +229,17 @@ Public Class ASM8080
             If tmp_string = "ORG" Or tmp_string = ".ORG" Then
                 current_adr = CalculateValue(tmp_string2)
                 'listing.Append("New ORG: " + HEX4(current_adr) + vbCrLf)
+                org_detected = True
                 Exit Sub
             ElseIf tmp_string.Contains(".TITLE") Then
                 listing.Append("TITLE" + vbCrLf)
-                tmp_string = ""
+
                 tmp_string2 = ""
                 tmp_string3 = ""
 
             ElseIf tmp_string2 = "ORG" Or tmp_string2 = ".ORG" Then
                 current_adr = CalculateValue(tmp_string3)
+                org_detected = True
                 'listing.Append("New ORG: " + HEX4(current_adr) + vbCrLf)
                 Exit Sub
             ElseIf tmp_string = "END" Or tmp_string2 = "END" Then
@@ -250,14 +265,14 @@ Public Class ASM8080
                     End If
 
                     If tmp_string2 = "DS" Or tmp_string2 = ".DS" Or tmp_string2 = "DB" Or tmp_string2 = ".DB" Or tmp_string2 = "DW" Or tmp_string2 = ".DW" Then
-                        current_adr = current_adr + Calcualte_DxLen(tmp_string2, tmp_string3)
+                        current_adr += Calcualte_DxLen(tmp_string2, tmp_string3)
                     End If
                     'listing.Append(HEX4(current_adr) + " Nauja label:" + tmp_string + vbCrLf)
                 Else
                     ReportError("Dublicate label: " + tmp_string + " at line:" + lineno.ToString + ". Previous labels defined at line:" + labels_lineno(labels.IndexOf(tmp_string)).ToString)
                 End If
             ElseIf tmp_string2 = "DS" Or tmp_string2 = ".DS" Or tmp_string2 = "DB" Or tmp_string2 = ".DB" Or tmp_string2 = "DW" Or tmp_string2 = ".DW" Then
-                current_adr = current_adr + Calcualte_DxLen(tmp_string2, tmp_string3)
+                current_adr += Calcualte_DxLen(tmp_string2, tmp_string3)
             End If
         ElseIf pass = 1 Then
 
@@ -268,7 +283,7 @@ Public Class ASM8080
             If ASM.Contains(tmp_string2) Then 'ASM operatoriai
                 If pass = 0 Then
                     Dim i = ASM.IndexOf(tmp_string2)
-                    current_adr = (current_adr + ASM_L(i))
+                    current_adr += ASM_L(i)
                     If current_adr > &HFFFF Then
                         ReportError("RAM adr overflow counting source. Program too long?")
                         current_adr = current_adr And &HFFFF
@@ -303,12 +318,12 @@ Public Class ASM8080
                         If tmp >= 0 Then
                             CA(current_adr)
                             listing.Append(";Reserved bytes at [" + HEX4(current_adr) + "-")
-                            current_adr = current_adr + tmp
+                            current_adr += tmp
                             CA(current_adr)
                             listing.Append("]")
                             current_adr += 1
                         Else
-                            errors.Add("DS value at line " + lineno.ToString + " is 0. Ignored.")
+                            ReportWarning("DS value at line " + lineno.ToString + " is 0. Ignored.")
                         End If
 
                         tmp_string3 = ""
@@ -353,7 +368,7 @@ Public Class ASM8080
                         CD(ASM_A(i))
                     End If
 
-                    current_adr = current_adr + ASM_L(i)
+                    current_adr += ASM_L(i)
                     '//search for label
                     If labels.Contains(tmp_string3) Then
 
@@ -454,7 +469,7 @@ Public Class ASM8080
             a = kabutese
             l = Asc(a)
         ElseIf a = """""" And kabutese = "" Then
-            ReportError("Empty value. Sustituted with 0. 2")
+            ReportWarning("Empty value. Sustituted with 0. 2")
             l = 0
         ElseIf a = "''" And kabutese <> "" Then                                     ' ''
             a = kabutese
@@ -468,6 +483,7 @@ Public Class ASM8080
             'Next
             'a = a
             'no way to get here!
+            ReportError("Internal value calculation error. String parsing.")
         ElseIf labels.Contains(a) Then
             Dim k = labels.IndexOf(a)
             l = labels_adr(k)
@@ -498,7 +514,7 @@ Public Class ASM8080
                 l = Val("&O0" + Regex.Replace(a, "[^0-8]", "")) And &HFFFF
             Else
                 Regex.Replace(a, "[^\d]", "")
-                If a = "" Then ReportError("No value calculated: [" + tmp_a + "]") : Return 0
+                If a = "" Then ReportWarning("No value calculated: [" + tmp_a + "]") : Return 0
                 l = Val(a)
             End If
 
@@ -517,7 +533,7 @@ Public Class ASM8080
 
         ram_adr += 1
         If ram_adr > &HFFFF Then
-            ReportError("RAM adr overflow writring byte. Program too long?")
+            ReportWarning("RAM adr overflow writring byte. Program too long?")
             ram_adr = ram_adr And &HFFFF
         End If
     End Sub
@@ -536,7 +552,7 @@ Public Class ASM8080
     Private Sub CA(a As UInt32)
         listing.Append(HEX4(a) + ": ")
         If a > &HFFFF Then
-            ReportError("RAM adr overflow: [" + Hex(a) + "]")
+            ReportWarning("RAM adr overflow: [" + Hex(a) + "]")
         End If
         ram_adr = a And &HFFFF
     End Sub
@@ -545,8 +561,12 @@ Public Class ASM8080
     ''' </summary>
     ''' <param name="a">Error text</param>
     Private Sub ReportError(a As String)
-        errors.Add(a + vbCrLf)
+        errors.Append(a + vbCrLf)
         listing.Append(" ERROR: " + a + vbCrLf)
+    End Sub
+    Private Sub ReportWarning(a As String)
+        warnings.Append(a + vbCrLf)
+        listing.Append(" WARNING: " + a + vbCrLf)
     End Sub
     ''' <summary>
     ''' Calculate how many bytes are in data string (DB,DW,DS)
@@ -666,14 +686,15 @@ Public Class ASM8080
     ''' <param name="current_adr">Current adr of DB</param>
     Private Sub CalculateDS(value As String, ByRef listing As StringBuilder, ByRef current_adr As UInt32)
         If value <> "" Then
-            current_adr = current_adr + CalculateValue(value)
+            current_adr += CalculateValue(value)
         End If
     End Sub
     Private Sub Button2_Click(sender As Object, e As EventArgs) Handles Button2.Click
         labels.Clear()
         labels_adr.Clear()
         RichTextBox2.Clear()
-        errors.Clear()
+        warnings = New StringBuilder
+        errors = New StringBuilder
         RAM.Initialize()
     End Sub
 
@@ -688,6 +709,10 @@ Public Class ASM8080
             End Try
         End If
 
+    End Sub
+    Private Sub BuildIntelHex(adr As UInt32)
+        intel_hex.Append(" ")
+        ram_adr = ram_adr
     End Sub
     ''' <summary>
     ''' Clean source code, remove extra spaces (tabs) for first collumns
@@ -705,12 +730,12 @@ Public Class ASM8080
 
         While Not stopas
             If value.Chars(i) <> " " Then
-                i = i + 1
+                i += 1
                 radau = False
             ElseIf value.Chars(i) = " " And Not radau Then
                 radau = True
-                i = i + 1
-                tabai = tabai + 1
+                i += 1
+                tabai += 1
             Else
                 value = value.Remove(i, 1)
             End If
