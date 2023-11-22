@@ -1,5 +1,6 @@
 ﻿' simple 8080 assembler.
 '(c)2023 by www.vabolis.lt
+Imports System.Drawing.Text
 Imports System.IO
 Imports System.Reflection
 Imports System.Runtime.Serialization.Formatters.Binary
@@ -120,7 +121,10 @@ Public Class ASM8080
         If current_adr <> ram_adr Then
             RichTextBox2.AppendText("%%%%%% ADR from assembler:" + Hex(current_adr) + " vs ADR from memcounter:" + Hex(ram_adr) + vbCrLf)
         End If
-
+        FlushIntelHex()
+        RichTextBox2.AppendText("%%%%%%% IntelHEX:" + vbCrLf)
+        intel_hex.Append(":00000001FF")
+        RichTextBox2.AppendText(intel_hex.ToString)
     End Sub
     ''' <summary>
     ''' Convert integer to fixed lenght (4) hex string
@@ -248,6 +252,7 @@ Public Class ASM8080
                 Exit Sub
             ElseIf tmp_string = "END" Or tmp_string2 = "END" Then
                 listing.Append("ADR:" + HEX4(current_adr) + ", END direktyva at line:" + lineno.ToString + vbCrLf)
+                FlushIntelHex()
                 Exit Sub
             ElseIf tmp_string = "START" Or tmp_string2 = "START" Then
                 listing.Append("START direktyva at line:" + lineno.ToString + vbCrLf)
@@ -367,7 +372,7 @@ Public Class ASM8080
                             ReportError(HEX4(current_adr) + "Too many or few args:" + tmp_string3 + " at line: " + lineno.ToString)
                         End If
                         tmp_string3 = ""
-                    Else
+                    ElseIf ASM_L(i) > 0 Then
                         CA(current_adr)
                         listing.Append(HEX2(ASM_A(i)))
                         CD(ASM_A(i))
@@ -493,7 +498,8 @@ Public Class ASM8080
             End If
 
             ReportError("String in byte/word val detected. Nonsense in output:")
-            UnfoldTheString(a, listing, current_adr, True) '???
+            ReportError(a)
+            '//UnfoldTheString(a, listing, current_adr, True) '???
             ReportError("Internal assembler error. Value calculation error. String parsing.")
         ElseIf labels.Contains(a) Then
             Dim k = labels.IndexOf(a)
@@ -523,6 +529,9 @@ Public Class ASM8080
                 l = PHEX(a.ToUpper)
             ElseIf a.Contains("O") Or a.EndsWith("Q") Or a.EndsWith("q") Then
                 l = Val("&O0" + Regex.Replace(a, "[^0-8]", "")) And &HFFFF
+            ElseIf a.Contains("A") Or a.Contains("B") Or a.Contains("C") Or a.Contains("D") Or a.Contains("E") Or a.Contains("F") Then
+                'BLOGAS HEXas
+                l = PHEX(a.ToUpper)
             Else
                 Regex.Replace(a, "[^\d]", "")
                 If a = "" Then ReportWarning("No value calculated: [" + tmp_a + "]") : Return 0
@@ -541,6 +550,8 @@ Public Class ASM8080
 
         d = d And 255
         RAM(ram_adr) = d
+
+        BuildIntelHex(ram_adr, d)
 
         ram_adr += 1
         If ram_adr > &HFFFF Then
@@ -702,30 +713,65 @@ Public Class ASM8080
         End If
     End Sub
     Private Sub Button2_Click(sender As Object, e As EventArgs) Handles Button2.Click
+        ClearInternals()
+    End Sub
+    Private Sub ClearInternals()
         labels.Clear()
+        FlushIntelHex()
+        intel_hex = New StringBuilder
         labels_adr.Clear()
         RichTextBox2.Clear()
         warnings = New StringBuilder
         errors = New StringBuilder
         RAM.Initialize()
+
     End Sub
 
-    Private Sub Button3_Click(sender As Object, e As EventArgs) Handles Button3.Click
-        SaveFileDialog1.Title = "Save ALL 64K RAM"
-        SaveFileDialog1.Filter = "Binary file |*.bin|All files |*.*"
-        If SaveFileDialog1.ShowDialog = DialogResult.OK Then
-            Try
-                File.WriteAllBytes(SaveFileDialog1.FileName, RAM)
-            Catch ex As Exception
-                MsgBox("Write file error: " + ex.Message)
-            End Try
+
+
+    Dim intel_hex_adr As UInt32 = &HFFFFFF
+    Dim intel_hex_line As String
+    Dim intel_hex_len As UInt32 = 0
+
+
+    Private Sub FlushIntelHex()
+        Dim i As UInt32
+        Dim intel_hex_chksum As UInt32
+        If intel_hex_line <> "" Then
+
+            intel_hex_chksum = intel_hex_len + PHEX(intel_hex_line.Substring(0, 2)) + PHEX(intel_hex_line.Substring(2, 2))
+            Dim x = intel_hex_line.Length
+            For i = 0 To intel_hex_len - 1
+                intel_hex_chksum = intel_hex_chksum + PHEX(intel_hex_line.Substring(6 + i * 2, 2))
+            Next
+            intel_hex_chksum = (&H100 - (intel_hex_chksum And 255)) And 255
+
+            intel_hex_line = ":" + HEX2(intel_hex_len) + intel_hex_line + HEX2(intel_hex_chksum)
+            intel_hex.Append(intel_hex_line + vbCrLf)
+            intel_hex_line = ""
+        End If
+        intel_hex_adr = &HFFFFFF
+        intel_hex_len = 0
+    End Sub
+    Private Sub BuildIntelHex(adr As UInt32, d As UInt32)
+        ':LLAAAAXXDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDSS
+        ':100000oo000134120203040506AA0708090A0B0CB2
+        ':10010000C3A00AC21F0113CDBC0629DA6601D5EBD4
+        If intel_hex_adr <> adr And intel_hex_line <> "" Then FlushIntelHex()
+
+            If intel_hex_adr <> adr Then 'NAUJAS ADR=NAUJA EILUTE
+            intel_hex_line = HEX4(adr) + "00" + HEX2(d)
+            intel_hex_adr = adr + 1
+            intel_hex_len += 1
+        Else
+                intel_hex_line = intel_hex_line + HEX2(d)
+            intel_hex_adr = adr + 1
+            intel_hex_len += 1
         End If
 
+        If intel_hex_len > &H1F Then FlushIntelHex()
     End Sub
-    Private Sub BuildIntelHex(adr As UInt32)
-        intel_hex.Append(" ")
-        ram_adr = ram_adr
-    End Sub
+
     ''' <summary>
     ''' Clean source code, remove extra spaces (tabs) for first collumns
     ''' </summary>
@@ -757,5 +803,101 @@ Public Class ASM8080
         Return value
     End Function
 
+    Private Sub SaveIntelHexToolStripMenuItem_Click(sender As Object, e As EventArgs) Handles SaveIntelHexToolStripMenuItem.Click
+        SaveFileDialog1.Title = "Save Intel Hex"
+        SaveFileDialog1.Filter = "IntelHex file |*.hex|All files |*.*"
+        SaveFileDialog1.FileName = "output.hex"
+        If SaveFileDialog1.ShowDialog = DialogResult.OK Then
+            Try
+                File.WriteAllText(SaveFileDialog1.FileName, intel_hex.ToString)
+            Catch ex As Exception
+                MsgBox("Write file error: " + ex.Message)
+            End Try
+        End If
+    End Sub
 
+    Private Sub SaveAllRAMToolStripMenuItem_Click(sender As Object, e As EventArgs) Handles SaveAllRAMToolStripMenuItem.Click
+        SaveFileDialog1.Title = "Save ALL 64K RAM"
+        SaveFileDialog1.Filter = "Binary file |*.bin|All files |*.*"
+        SaveFileDialog1.FileName = "output.bin"
+        If SaveFileDialog1.ShowDialog = DialogResult.OK Then
+            Try
+                File.WriteAllBytes(SaveFileDialog1.FileName, RAM)
+            Catch ex As Exception
+                MsgBox("Write file error: " + ex.Message)
+            End Try
+        End If
+    End Sub
+
+    Private Sub SaveListingToolStripMenuItem_Click(sender As Object, e As EventArgs) Handles SaveListingToolStripMenuItem.Click
+        SaveFileDialog1.Title = "Save Listing"
+        SaveFileDialog1.Filter = "Listing file |*.lst|All files |*.*"
+        SaveFileDialog1.FileName = "listing.lst"
+        If SaveFileDialog1.ShowDialog = DialogResult.OK Then
+            Try
+                File.WriteAllText(SaveFileDialog1.FileName, listing.ToString)
+            Catch ex As Exception
+                MsgBox("Write file error: " + ex.Message)
+            End Try
+        End If
+    End Sub
+
+    Private Sub ExitToolStripMenuItem_Click(sender As Object, e As EventArgs) Handles ExitToolStripMenuItem.Click
+        Application.Exit()
+    End Sub
+
+    Private Sub SaveLabelDatabaseToolStripMenuItem_Click(sender As Object, e As EventArgs) Handles SaveLabelDatabaseToolStripMenuItem.Click
+        Dim tmp As New StringBuilder
+        If labels.Count > 0 Then
+            RichTextBox2.AppendText(vbCrLf + "%%%%%% LABEL DATABASE:" + vbCrLf)
+            For i = 0 To labels.Count - 1
+                tmp.Append(labels(i) + ":" + vbTab + "$" + HEX4(labels_adr(i)) + vbTab + "; defined at line:" + labels_lineno(i).ToString + vbCrLf)
+            Next
+        End If
+
+        SaveFileDialog1.Title = "Save Label database"
+        SaveFileDialog1.Filter = "Text file |*.txt|All files |*.*"
+        SaveFileDialog1.FileName = "labels.txt"
+        If SaveFileDialog1.ShowDialog = DialogResult.OK Then
+            Try
+                File.WriteAllText(SaveFileDialog1.FileName, tmp.ToString)
+            Catch ex As Exception
+                MsgBox("Write file error: " + ex.Message)
+            End Try
+        End If
+    End Sub
+
+    Private Sub LoadAssemblerSourceToolStripMenuItem_Click(sender As Object, e As EventArgs) Handles LoadAssemblerSourceToolStripMenuItem.Click
+        RichTextBox1.Clear()
+
+        OpenFileDialog1.Title = "Load assembler source"
+        OpenFileDialog1.Filter = "Asm source file |*.asm|All files |*.*"
+        OpenFileDialog1.FileName = "source.asm"
+        If OpenFileDialog1.ShowDialog = DialogResult.OK Then
+            Try
+                RichTextBox1.Text = File.ReadAllText(OpenFileDialog1.FileName)
+            Catch ex As Exception
+                MsgBox("Write file error: " + ex.Message)
+            End Try
+        End If
+
+    End Sub
+
+    Private Sub NewSourceToolStripMenuItem_Click(sender As Object, e As EventArgs) Handles NewSourceToolStripMenuItem.Click
+        RichTextBox1.Clear()
+        ClearInternals()
+    End Sub
+
+    Private Sub SavelSourceToolStripMenuItem_Click(sender As Object, e As EventArgs) Handles SavelSourceToolStripMenuItem.Click
+        SaveFileDialog1.Title = "Save source"
+        SaveFileDialog1.Filter = "Source file |*.asm|All files |*.*"
+        SaveFileDialog1.FileName = "source.asm"
+        If SaveFileDialog1.ShowDialog = DialogResult.OK Then
+            Try
+                File.WriteAllText(SaveFileDialog1.FileName, RichTextBox1.ToString)
+            Catch ex As Exception
+                MsgBox("Write file error: " + ex.Message)
+            End Try
+        End If
+    End Sub
 End Class
