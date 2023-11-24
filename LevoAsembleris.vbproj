@@ -145,7 +145,6 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <Content Include="ALLOPCODES.ASM" />
     <Content Include="component.ico" />
   </ItemGroup>
   <ItemGroup>
