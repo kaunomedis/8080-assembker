@@ -30,8 +30,10 @@ Partial Class ASM8080
         Me.SaveFileDialog1 = New System.Windows.Forms.SaveFileDialog()
         Me.MenuStrip1 = New System.Windows.Forms.MenuStrip()
         Me.FileToolStripMenuItem = New System.Windows.Forms.ToolStripMenuItem()
+        Me.NewSourceToolStripMenuItem = New System.Windows.Forms.ToolStripMenuItem()
         Me.LoadAssemblerSourceToolStripMenuItem = New System.Windows.Forms.ToolStripMenuItem()
         Me.ToolStripSeparator1 = New System.Windows.Forms.ToolStripSeparator()
+        Me.SavelSourceToolStripMenuItem = New System.Windows.Forms.ToolStripMenuItem()
         Me.SaveIntelHexToolStripMenuItem = New System.Windows.Forms.ToolStripMenuItem()
         Me.SaveAllRAMToolStripMenuItem = New System.Windows.Forms.ToolStripMenuItem()
         Me.SaveListingToolStripMenuItem = New System.Windows.Forms.ToolStripMenuItem()
@@ -39,8 +41,6 @@ Partial Class ASM8080
         Me.ToolStripSeparator2 = New System.Windows.Forms.ToolStripSeparator()
         Me.ExitToolStripMenuItem = New System.Windows.Forms.ToolStripMenuItem()
         Me.OpenFileDialog1 = New System.Windows.Forms.OpenFileDialog()
-        Me.NewSourceToolStripMenuItem = New System.Windows.Forms.ToolStripMenuItem()
-        Me.SavelSourceToolStripMenuItem = New System.Windows.Forms.ToolStripMenuItem()
         Me.MenuStrip1.SuspendLayout()
         Me.SuspendLayout()
         '
@@ -96,6 +96,12 @@ Partial Class ASM8080
         Me.FileToolStripMenuItem.Size = New System.Drawing.Size(37, 20)
         Me.FileToolStripMenuItem.Text = "File"
         '
+        'NewSourceToolStripMenuItem
+        '
+        Me.NewSourceToolStripMenuItem.Name = "NewSourceToolStripMenuItem"
+        Me.NewSourceToolStripMenuItem.Size = New System.Drawing.Size(194, 22)
+        Me.NewSourceToolStripMenuItem.Text = "New project"
+        '
         'LoadAssemblerSourceToolStripMenuItem
         '
         Me.LoadAssemblerSourceToolStripMenuItem.Name = "LoadAssemblerSourceToolStripMenuItem"
@@ -106,6 +112,12 @@ Partial Class ASM8080
         '
         Me.ToolStripSeparator1.Name = "ToolStripSeparator1"
         Me.ToolStripSeparator1.Size = New System.Drawing.Size(191, 6)
+        '
+        'SavelSourceToolStripMenuItem
+        '
+        Me.SavelSourceToolStripMenuItem.Name = "SavelSourceToolStripMenuItem"
+        Me.SavelSourceToolStripMenuItem.Size = New System.Drawing.Size(194, 22)
+        Me.SavelSourceToolStripMenuItem.Text = "Save source code"
         '
         'SaveIntelHexToolStripMenuItem
         '
@@ -146,18 +158,6 @@ Partial Class ASM8080
         '
         Me.OpenFileDialog1.FileName = "OpenFileDialog1"
         '
-        'NewSourceToolStripMenuItem
-        '
-        Me.NewSourceToolStripMenuItem.Name = "NewSourceToolStripMenuItem"
-        Me.NewSourceToolStripMenuItem.Size = New System.Drawing.Size(194, 22)
-        Me.NewSourceToolStripMenuItem.Text = "New source"
-        '
-        'SavelSourceToolStripMenuItem
-        '
-        Me.SavelSourceToolStripMenuItem.Name = "SavelSourceToolStripMenuItem"
-        Me.SavelSourceToolStripMenuItem.Size = New System.Drawing.Size(194, 22)
-        Me.SavelSourceToolStripMenuItem.Text = "Savel source"
-        '
         'ASM8080
         '
         Me.AutoScaleDimensions = New System.Drawing.SizeF(6.0!, 13.0!)
@@ -168,6 +168,7 @@ Partial Class ASM8080
         Me.Controls.Add(Me.RichTextBox2)
         Me.Controls.Add(Me.RichTextBox1)
         Me.Controls.Add(Me.MenuStrip1)
+        Me.Icon = CType(resources.GetObject("$this.Icon"), System.Drawing.Icon)
         Me.MainMenuStrip = Me.MenuStrip1
         Me.Name = "ASM8080"
         Me.Text = "8080 asembleris"

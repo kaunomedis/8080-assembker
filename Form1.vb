@@ -1,9 +1,7 @@
 ﻿' simple 8080 assembler.
 '(c)2023 by www.vabolis.lt
-Imports System.Drawing.Text
+
 Imports System.IO
-Imports System.Reflection
-Imports System.Runtime.Serialization.Formatters.Binary
 Imports System.Text
 Imports System.Text.RegularExpressions
 
@@ -78,6 +76,8 @@ Public Class ASM8080
 
     Dim ram_adr As UInt32
     Dim RAM(&H10000) As Byte
+
+    Dim last_openfile As String
 
     Private Sub Button1_Click(sender As Object, e As EventArgs) Handles Button1.Click
         Dim tmp As String
@@ -159,13 +159,18 @@ Public Class ASM8080
     ''' <param name="a">Input string</param>
     ''' <returns>Hex converted to integer</returns>
     Private Function PHEX(a As String) As UInt32
+        Dim tmp As UInt64
         a = a.ToUpper.Trim
         a = Regex.Replace(a, "[^0-9A-F]", "")
-        If a.Length > 4 Then
-            ReportError("HEX overflow [" + a + "] trimmed to 4 chars")
-            a = a.Substring(0, 4)
+        If a.Length > 5 Then
+            '//a = a.Substring(0, 4)
+            If a.Length > 6 Then a = a.Substring(a.Length - 5, 5)
+            tmp = CUInt("&H0" + a)
+            If tmp > &HFFFF Then ReportError("HEX overflow [" + a + "] trimmed to 4 chars:" + HEX4(tmp And &HFFFF))
+
         End If
-        Return (CUInt("&H0" + a) And &HFFFF)
+        tmp = (CUInt("&H0" + a) And &HFFFF)
+        Return tmp
     End Function
 
     Dim kabutese As String = "" 'work'a'round
@@ -236,7 +241,6 @@ Public Class ASM8080
         If keywords.Contains(tmp_string) Or keywords.Contains(tmp_string2) Then '//KOMANDOS
             If tmp_string = "ORG" Or tmp_string = ".ORG" Then
                 current_adr = CalculateValue(tmp_string2)
-                'listing.Append("New ORG: " + HEX4(current_adr) + vbCrLf)
                 org_detected = True
                 Exit Sub
             ElseIf tmp_string.Contains(".TITLE") Then
@@ -248,7 +252,6 @@ Public Class ASM8080
             ElseIf tmp_string2 = "ORG" Or tmp_string2 = ".ORG" Then
                 current_adr = CalculateValue(tmp_string3)
                 org_detected = True
-                'listing.Append("New ORG: " + HEX4(current_adr) + vbCrLf)
                 Exit Sub
             ElseIf tmp_string = "END" Or tmp_string2 = "END" Then
                 listing.Append("ADR:" + HEX4(current_adr) + ", END direktyva at line:" + lineno.ToString + vbCrLf)
@@ -277,7 +280,6 @@ Public Class ASM8080
                     If tmp_string2 = "DS" Or tmp_string2 = ".DS" Or tmp_string2 = "DB" Or tmp_string2 = ".DB" Or tmp_string2 = "DW" Or tmp_string2 = ".DW" Then
                         current_adr += Calcualte_DxLen(tmp_string2, tmp_string3)
                     End If
-                    'listing.Append(HEX4(current_adr) + " Nauja label:" + tmp_string + vbCrLf)
                 Else
                     ReportError("Dublicate label: " + tmp_string + " at line:" + lineno.ToString + ". Previous labels defined at line:" + labels_lineno(labels.IndexOf(tmp_string)).ToString)
                 End If
@@ -389,7 +391,6 @@ Public Class ASM8080
                             CD(l)
                             tmps = " " + HEX2(l And 255)
                         ElseIf ASM_L(i) = 3 Then
-                            'listing.Append(" " + HEX2(l And 255) + " " + HEX2(l >> 8)) '//LSB-MSB
                             listing.Append(HexPair(l))
                             CD(l And 255) : CD(l >> 8)
                             tmps = " " + HEX4(l)
@@ -402,7 +403,7 @@ Public Class ASM8080
                         listing.Append(tmps)
 
                     Else
-                        '//no label? direct value?
+
                         Dim k = CalculateValue(tmp_string3)
                         If ASM_L(i) = 1 Then listing.Append(vbTab)
                         If ASM_L(i) = 2 Then listing.Append(" " + HEX2(k) + vbTab) : CD(k) '//tiesioginis baito krovimas
@@ -742,7 +743,7 @@ Public Class ASM8080
             intel_hex_chksum = intel_hex_len + PHEX(intel_hex_line.Substring(0, 2)) + PHEX(intel_hex_line.Substring(2, 2))
             Dim x = intel_hex_line.Length
             For i = 0 To intel_hex_len - 1
-                intel_hex_chksum = intel_hex_chksum + PHEX(intel_hex_line.Substring(6 + i * 2, 2))
+                intel_hex_chksum += PHEX(intel_hex_line.Substring(6 + i * 2, 2))
             Next
             intel_hex_chksum = (&H100 - (intel_hex_chksum And 255)) And 255
 
@@ -753,23 +754,24 @@ Public Class ASM8080
         intel_hex_adr = &HFFFFFF
         intel_hex_len = 0
     End Sub
+    Private Const iHEX_Len As UInt32 = &H1F
     Private Sub BuildIntelHex(adr As UInt32, d As UInt32)
         ':LLAAAAXXDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDSS
         ':100000oo000134120203040506AA0708090A0B0CB2
         ':10010000C3A00AC21F0113CDBC0629DA6601D5EBD4
         If intel_hex_adr <> adr And intel_hex_line <> "" Then FlushIntelHex()
 
-            If intel_hex_adr <> adr Then 'NAUJAS ADR=NAUJA EILUTE
+        If intel_hex_adr <> adr Then 'NAUJAS ADR=NAUJA EILUTE
             intel_hex_line = HEX4(adr) + "00" + HEX2(d)
             intel_hex_adr = adr + 1
             intel_hex_len += 1
         Else
-                intel_hex_line = intel_hex_line + HEX2(d)
+            intel_hex_line += HEX2(d)
             intel_hex_adr = adr + 1
             intel_hex_len += 1
         End If
 
-        If intel_hex_len > &H1F Then FlushIntelHex()
+        If intel_hex_len > iHEX_Len Then FlushIntelHex()
     End Sub
 
     ''' <summary>
@@ -806,10 +808,11 @@ Public Class ASM8080
     Private Sub SaveIntelHexToolStripMenuItem_Click(sender As Object, e As EventArgs) Handles SaveIntelHexToolStripMenuItem.Click
         SaveFileDialog1.Title = "Save Intel Hex"
         SaveFileDialog1.Filter = "IntelHex file |*.hex|All files |*.*"
-        SaveFileDialog1.FileName = "output.hex"
+        If last_openfile <> "" Then SaveFileDialog1.FileName = last_openfile + ".hex" Else SaveFileDialog1.FileName = "file.hex"
         If SaveFileDialog1.ShowDialog = DialogResult.OK Then
             Try
                 File.WriteAllText(SaveFileDialog1.FileName, intel_hex.ToString)
+                last_openfile = Path.GetFileNameWithoutExtension(SaveFileDialog1.FileName)
             Catch ex As Exception
                 MsgBox("Write file error: " + ex.Message)
             End Try
@@ -819,10 +822,11 @@ Public Class ASM8080
     Private Sub SaveAllRAMToolStripMenuItem_Click(sender As Object, e As EventArgs) Handles SaveAllRAMToolStripMenuItem.Click
         SaveFileDialog1.Title = "Save ALL 64K RAM"
         SaveFileDialog1.Filter = "Binary file |*.bin|All files |*.*"
-        SaveFileDialog1.FileName = "output.bin"
+        If last_openfile <> "" Then SaveFileDialog1.FileName = last_openfile + ".bin" Else SaveFileDialog1.FileName = "file.bin"
         If SaveFileDialog1.ShowDialog = DialogResult.OK Then
             Try
                 File.WriteAllBytes(SaveFileDialog1.FileName, RAM)
+                last_openfile = Path.GetFileNameWithoutExtension(SaveFileDialog1.FileName)
             Catch ex As Exception
                 MsgBox("Write file error: " + ex.Message)
             End Try
@@ -832,10 +836,11 @@ Public Class ASM8080
     Private Sub SaveListingToolStripMenuItem_Click(sender As Object, e As EventArgs) Handles SaveListingToolStripMenuItem.Click
         SaveFileDialog1.Title = "Save Listing"
         SaveFileDialog1.Filter = "Listing file |*.lst|All files |*.*"
-        SaveFileDialog1.FileName = "listing.lst"
+        If last_openfile <> "" Then SaveFileDialog1.FileName = last_openfile + ".lst" Else SaveFileDialog1.FileName = "file.lst"
         If SaveFileDialog1.ShowDialog = DialogResult.OK Then
             Try
                 File.WriteAllText(SaveFileDialog1.FileName, listing.ToString)
+                last_openfile = Path.GetFileNameWithoutExtension(SaveFileDialog1.FileName)
             Catch ex As Exception
                 MsgBox("Write file error: " + ex.Message)
             End Try
@@ -857,10 +862,11 @@ Public Class ASM8080
 
         SaveFileDialog1.Title = "Save Label database"
         SaveFileDialog1.Filter = "Text file |*.txt|All files |*.*"
-        SaveFileDialog1.FileName = "labels.txt"
+        If last_openfile <> "" Then SaveFileDialog1.FileName = last_openfile + ".txt" Else SaveFileDialog1.FileName = "file.txt"
         If SaveFileDialog1.ShowDialog = DialogResult.OK Then
             Try
                 File.WriteAllText(SaveFileDialog1.FileName, tmp.ToString)
+                last_openfile = Path.GetFileNameWithoutExtension(SaveFileDialog1.FileName)
             Catch ex As Exception
                 MsgBox("Write file error: " + ex.Message)
             End Try
@@ -868,14 +874,16 @@ Public Class ASM8080
     End Sub
 
     Private Sub LoadAssemblerSourceToolStripMenuItem_Click(sender As Object, e As EventArgs) Handles LoadAssemblerSourceToolStripMenuItem.Click
-        RichTextBox1.Clear()
+
 
         OpenFileDialog1.Title = "Load assembler source"
         OpenFileDialog1.Filter = "Asm source file |*.asm|All files |*.*"
-        OpenFileDialog1.FileName = "source.asm"
+        If last_openfile <> "" Then OpenFileDialog1.FileName = last_openfile + ".asm" Else OpenFileDialog1.FileName = "file.asm"
         If OpenFileDialog1.ShowDialog = DialogResult.OK Then
+            RichTextBox1.Clear()
             Try
                 RichTextBox1.Text = File.ReadAllText(OpenFileDialog1.FileName)
+                last_openfile = Path.GetFileNameWithoutExtension(OpenFileDialog1.FileName)
             Catch ex As Exception
                 MsgBox("Write file error: " + ex.Message)
             End Try
@@ -891,13 +899,16 @@ Public Class ASM8080
     Private Sub SavelSourceToolStripMenuItem_Click(sender As Object, e As EventArgs) Handles SavelSourceToolStripMenuItem.Click
         SaveFileDialog1.Title = "Save source"
         SaveFileDialog1.Filter = "Source file |*.asm|All files |*.*"
-        SaveFileDialog1.FileName = "source.asm"
+        If last_openfile <> "" Then SaveFileDialog1.FileName = last_openfile + ".asm" Else SaveFileDialog1.FileName = "file.asm"
         If SaveFileDialog1.ShowDialog = DialogResult.OK Then
             Try
                 File.WriteAllText(SaveFileDialog1.FileName, RichTextBox1.ToString)
+                last_openfile = Path.GetFileNameWithoutExtension(SaveFileDialog1.FileName)
             Catch ex As Exception
                 MsgBox("Write file error: " + ex.Message)
             End Try
         End If
     End Sub
+
+
 End Class
