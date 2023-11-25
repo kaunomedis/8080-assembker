@@ -391,7 +391,7 @@ Public Class ASM8080
                             CD(l)
                             tmps = " " + HEX2(l And 255)
                         ElseIf ASM_L(i) = 3 Then
-                            listing.Append(HexPair(l))
+                            listing.Append(" " + HexPair(l))
                             CD(l And 255) : CD(l >> 8)
                             tmps = " " + HEX4(l)
                         Else
